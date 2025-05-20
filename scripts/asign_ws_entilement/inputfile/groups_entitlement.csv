@@ -1,1 +1,3 @@
 group,workspace_admin,workspace_access,sql_access,cluster_create
+test-api-group-01,OFF,ON,ON,OFF
+testGroup,ON,ON,ON,ON

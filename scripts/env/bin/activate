@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV=/home/ubuntu/work/databricks_test_api/ipaddress_update/env
+VIRTUAL_ENV=/home/ubuntu/work/databricks_api_test/databricks_api_set_workspace_object/scripts/env
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

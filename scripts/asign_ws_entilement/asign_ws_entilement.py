@@ -1,107 +1,119 @@
 
+from __future__ import annotations
 from dotenv import load_dotenv
+
 import os
+import re
 from pathlib import Path
-from typing import Dict, List
+from typing import List, Dict, Set
+from urllib.parse import urlparse
+
 import pandas as pd
-
 from databricks.sdk import WorkspaceClient, AccountClient
-from databricks.sdk.service.iam import WorkspacePermission
-from databricks.sdk.service.iam import ComplexValue
+from databricks.sdk.service.iam import WorkspacePermission,ComplexValue
 
+# ---------- 定数 -------------------------------------------------------------
 # スクリプトファイルのディレクトリを基準に .env ファイルパスを組み立て
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))        # scripts/ の絶対パス
 PROJECT_ROOT = os.path.dirname(BASE_DIR)                     # その１階層上
-csv_path = os.path.join(BASE_DIR,"inputfile/groups_entitlement.csv")
-dotenv_path = os.path.join(PROJECT_ROOT, '.env')             # プロジェクトルート直下の .env
+CSV_PATH = os.path.join(BASE_DIR,"inputfile/groups_entitlement.csv")
+ENTITLEMENT_VALUES = {
+    "workspace_access": "workspace-access",
+    "sql_access": "databricks-sql-access",
+    "cluster_create": "allow-cluster-create",
+}
 
-print(f"""
-    {csv_path}
-    """)
+# クレデンシャルの取得
+dotenv_path = os.path.join(PROJECT_ROOT, '.env')             # プロジェクトルート直下の .env
 # ワークスペースクライアントの定義
 w = WorkspaceClient(
   host          = os.getenv("DATABRICKS_HOST"),
   client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
   client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
 )
-a = AccountClient(
+
+
+# アカウントクライアントの定義
+ac = AccountClient(
     host          = os.getenv("DATABRICKS_ACCOUNT_HOST"),
     account_id    = os.getenv("DATABRICKS_ACCOUNT_ID"),
     client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
     client_secret = os.getenv("DATABRICKS_ACCOUNT_SECRET")
 )
-CSV_PATH = "./groups_entilement.csv"             # ← 適宜変更（UTF-8 想定）
-workspace_id = w.get_workspace_id()
-# print(workspace_id)
 
-# def load_target_groups(csv_path: Path) -> List[str]:
-#     """CSV から group_physical_name 列を読み取り、ユニークなリストを返す。"""
-#     df = pd.read_csv(csv_path, encoding="utf-8")
-#     required_cols = {"group_logical_name", "group_physical_name"}
-#     # 必須列が存在するかをチェック
-#     if required_cols - set(df.columns):
-#         raise ValueError(f"CSV に必須列 {required_cols} がありません。")
-#     # NaN を除外し物理名のみ返却
-#     return df["group_physical_name"].dropna().unique().tolist()
+# ---------- ユーティリティ ----------------------------------------------------
+def load_csv(path: Path) -> Dict[str, Set[str]]:
+    """CSV => {group_name: set(権限文字列)} へ変換"""
+    df = pd.read_csv(path, encoding="utf-8")
+    required_cols = [
+        "group",
+        "workspace_admin",
+        "workspace_access",
+        "sql_access",
+        "cluster_create",
+    ]
+    if set(required_cols) - set(df.columns):
+        raise ValueError("CSV に必要な列が不足しています: " + ", ".join(required_cols))
 
-# def assign_groups_entilement(csv_path: Path) -> None:
-#     """
-#     CSV の物理グループ名に一致するアカウントグループをワークスペースへ USER 権限で追加する。
-#     既に追加済み、または存在しないグループはスキップする。
-#     """
+    mapping: Dict[str, Set[str]] = {}
+    for _, row in df.iterrows():
+        grp = str(row["group"]).strip()
+        perms: Set[str] = set()
+        if str(row["workspace_admin"]).upper() == "ON":
+            perms.add("workspace_admin")
+        for col in ("workspace_access", "sql_access", "cluster_create"):
+            if str(row[col]).upper() == "ON":
+                perms.add(col)
+        mapping[grp] = perms
+    return mapping
 
-#     targets = load_target_groups(csv_path)
-#     lookup = build_group_lookup(a)
-#     already = current_workspace_group_ids(a)
 
-#     print(f"★ CSV に定義された対象グループ数: {len(targets)}")
-#     added, skipped = 0, 0
+def build_ws_group_lookup() -> Dict[str, int]:
+    """ワークスペース内のグループ {display_name: id} を取得"""
+    return {g.display_name: int(g.id) for g in w.groups.list()}
 
-#     for physical_name in targets:
-#         gid = lookup.get(physical_name)
+# ================= メイン処理 ========================================
 
-#         # グループがアカウントに存在しない場合
-#         if gid is None:
-#             print(f"⚠️  グループ '{physical_name}' がアカウントに存在しないためスキップ")
-#             skipped += 1
-#             continue
+def main() -> None:
+    ws_id = w.get_workspace_id()
+    print(f"対象ワークスペース ID: {ws_id}\n")
 
-#         # 既にワークスペースに割り当て済みの場合
-#         if gid in already:
-#             print(f"ℹ️  グループ '{physical_name}' は既にワークスペースに割り当て済み - スキップ")
-#             skipped += 1
-#             continue
+    csv_perms = load_csv(CSV_PATH)
+    ws_groups = build_ws_group_lookup()
 
-#         # WORKSPACE へ USER 権限で割り当て
-        
-#         a.workspace_assignment.update(
-#             workspace_id=workspace_id,
-#             principal_id=gid,
-#             permissions=[WorkspacePermission.USER],
-#         )
-#         print(f"✅  グループ '{physical_name}' をワークスペース {workspace_id} に追加しました")
-#         added += 1
+    # --- 対象グループとスキップ分を振り分け --------------------------
+    targets = {g: p for g, p in csv_perms.items() if g in ws_groups}
+    for missing in (set(csv_perms) - set(targets)):
+        print(f"⚠️  グループ '{missing}' がワークスペースに存在しないためスキップ")
 
-#     print(f"\n◆ 処理結果: 追加 {added} / スキップ {skipped}")
+    # --- 付与処理 ------------------------------------------------------
+    for grp_name, perms in targets.items():
+        gid = ws_groups[grp_name]
+        print(f"\n▶ グループ '{grp_name}' (id={gid}) に設定する権限: {', '.join(perms) or 'なし'}")
 
-# ---------- エントリーポイント ----------------------------------------------
+        # 1) Workspace Admin（ON のときのみ付与、OFF には干渉しない）
+        if "workspace_admin" in perms:
+            ac.workspace_assignment.update(
+                workspace_id=ws_id,
+                principal_id=gid,
+                permissions=[WorkspacePermission.ADMIN],
+            )
+            print("  - Workspace 管理者権限を付与")
+
+        # 2) エンタイトルメント（ON のものをマージ付与）
+        else:
+            ent_values = [ENTITLEMENT_VALUES[p] for p in perms if p in ENTITLEMENT_VALUES]
+            if ent_values:
+                current = ac.groups.get(id=gid).entitlements or []
+                merged = {e.value for e in current}.union(ent_values)
+                w.groups.update(
+                    id=str(gid),
+                    entitlements=[ComplexValue(value=v) for v in merged],
+                )
+                print("  - Entitlements 更新: " + ", ".join(ent_values))
+
+    print("\n◆ すべての処理が完了しました")
+
 
 if __name__ == "__main__":
-    status= a.groups.update(
-        id="32514441361772",
-        entitlements=[ 
-            ComplexValue(
-                value='workspace-access'
-            ),
-            ComplexValue(
-                value='databricks-sql-access'
-            )
-        ]
-    )
-    print(status)
-
-#   a.workspace_assignment.update(
-#         workspace_id=WORKSPACE_ID,
-#         principal_id=int(grp.id),
-#         permissions=[iam.WorkspacePermission.ADMIN],  # ← ここを USER にすれば一般権限
-#     )
+    main()

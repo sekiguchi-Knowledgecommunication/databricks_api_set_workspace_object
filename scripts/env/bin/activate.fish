@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/ubuntu/work/databricks_test_api/ipaddress_update/env
+set -gx VIRTUAL_ENV /home/ubuntu/work/databricks_api_test/databricks_api_set_workspace_object/scripts/env
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

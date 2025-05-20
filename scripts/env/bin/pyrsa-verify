@@ -1,4 +1,4 @@
-#!/home/ubuntu/work/databricks_test_api/ipaddress_update/env/bin/python3
+#!/home/ubuntu/work/databricks_api_test/databricks_api_set_workspace_object/scripts/env/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
