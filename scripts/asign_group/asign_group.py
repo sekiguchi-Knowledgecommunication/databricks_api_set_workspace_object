@@ -15,10 +15,13 @@ import pandas as pd
 from databricks.sdk import WorkspaceClient, AccountClient
 from databricks.sdk.service.iam import WorkspacePermission
 
+from group_validator import export_workspace_groups, validate_groups
+
 # スクリプトファイルのディレクトリを基準に .env ファイルパスを組み立て
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))        # scripts/ の絶対パス
 PROJECT_ROOT = os.path.dirname(BASE_DIR)                     # その１階層上
-csv_path = os.path.join(BASE_DIR,"inputfolder/groups.csv")
+input_path = os.path.join(BASE_DIR,"inputfolder/groups.csv")
+output_path = os.path.join(BASE_DIR,"outputfolder/result_workspace_groups.csv")
 dotenv_path = os.path.join(PROJECT_ROOT, '.env')             # プロジェクトルート直下の .env
 
 load_dotenv(dotenv_path=dotenv_path)  # ここで読み込み
@@ -41,16 +44,15 @@ ws = WorkspaceClient(
 workspace_id = ws.get_workspace_id()
 print(workspace_id)
 
-def load_target_groups(csv_path: Path) -> List[str]:
+def load_target_groups(input_path: Path) -> List[str]:
     """CSV から group_physical_name 列を読み取り、ユニークなリストを返す。"""
-    df = pd.read_csv(csv_path, encoding="utf-8")
+    df = pd.read_csv(input_path, encoding="utf-8")
     required_cols = {"group_logical_name", "group_physical_name"}
     # 必須列が存在するかをチェック
     if required_cols - set(df.columns):
         raise ValueError(f"CSV に必須列 {required_cols} がありません。")
     # NaN を除外し物理名のみ返却
     return df["group_physical_name"].dropna().unique().tolist()
-
 
 def build_group_lookup(a: AccountClient) -> Dict[str, int]:
     """アカウント内の全グループを取得し、display_name → id の辞書を作成する。"""
@@ -63,13 +65,13 @@ def current_workspace_group_ids(a: AccountClient) -> set[int]:
 
 # ---------- メイン処理 --------------------------------------------------------
 
-def assign_groups(csv_path: Path) -> None:
+def assign_groups(input_path: Path) -> None:
     """
     CSV の物理グループ名に一致するアカウントグループをワークスペースへ USER 権限で追加する。
     既に追加済み、または存在しないグループはスキップする。
     """
 
-    targets = load_target_groups(csv_path)
+    targets = load_target_groups(input_path)
     lookup = build_group_lookup(ac)
     already = current_workspace_group_ids(ac)
 
@@ -106,4 +108,6 @@ def assign_groups(csv_path: Path) -> None:
 # ---------- エントリーポイント ----------------------------------------------
 
 if __name__ == "__main__":
-    assign_groups(csv_path)
+    assign_groups(input_path)
+    export_workspace_groups(ws,output_path)
+    validate_groups(input_path, ws)                   # ★ 追加：一致しなければ SystemExit で終了
