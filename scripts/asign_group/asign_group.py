@@ -18,19 +18,19 @@ from databricks.sdk.service.iam import WorkspacePermission
 # スクリプトファイルのディレクトリを基準に .env ファイルパスを組み立て
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))        # scripts/ の絶対パス
 PROJECT_ROOT = os.path.dirname(BASE_DIR)                     # その１階層上
-csv_path = os.path.join(BASE_DIR,"inputfile/groups.csv")
+csv_path = os.path.join(BASE_DIR,"inputfolder/groups.csv")
 dotenv_path = os.path.join(PROJECT_ROOT, '.env')             # プロジェクトルート直下の .env
 
 load_dotenv(dotenv_path=dotenv_path)  # ここで読み込み
 
-a = AccountClient(
+ac = AccountClient(
     host          = os.getenv("DATABRICKS_ACCOUNT_HOST"),
     account_id    = os.getenv("DATABRICKS_ACCOUNT_ID"),
     client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
     client_secret = os.getenv("DATABRICKS_ACCOUNT_SECRET")
 )
 
-w = WorkspaceClient(
+ws = WorkspaceClient(
   host          = os.getenv("DATABRICKS_HOST"),
   client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
   client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
@@ -38,7 +38,7 @@ w = WorkspaceClient(
 
 
 
-workspace_id = w.get_workspace_id()
+workspace_id = ws.get_workspace_id()
 print(workspace_id)
 
 def load_target_groups(csv_path: Path) -> List[str]:
@@ -59,7 +59,7 @@ def build_group_lookup(a: AccountClient) -> Dict[str, int]:
 
 def current_workspace_group_ids(a: AccountClient) -> set[int]:
     """既にワークスペースに割り当てられているグループ ID の集合を返す。"""
-    return {group.id for group in w.groups.list()}
+    return {group.id for group in ws.groups.list()}
 
 # ---------- メイン処理 --------------------------------------------------------
 
@@ -70,8 +70,8 @@ def assign_groups(csv_path: Path) -> None:
     """
 
     targets = load_target_groups(csv_path)
-    lookup = build_group_lookup(a)
-    already = current_workspace_group_ids(a)
+    lookup = build_group_lookup(ac)
+    already = current_workspace_group_ids(ac)
 
     print(f"★ CSV に定義された対象グループ数: {len(targets)}")
     added, skipped = 0, 0
@@ -93,7 +93,7 @@ def assign_groups(csv_path: Path) -> None:
 
         # WORKSPACE へ USER 権限で割り当て
         
-        a.workspace_assignment.update(
+        ac.workspace_assignment.update(
             workspace_id=workspace_id,
             principal_id=gid,
             permissions=[WorkspacePermission.USER],

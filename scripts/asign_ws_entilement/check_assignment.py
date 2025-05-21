@@ -19,7 +19,7 @@ PROJECT_ROOT = os.path.dirname(BASE_DIR)                     # その１階層�
 # クレデンシャルの取得
 dotenv_path = os.path.join(PROJECT_ROOT, '.env')             # プロジェクトルート直下の .env
 # ワークスペースクライアントの定義
-w = WorkspaceClient(
+ws = WorkspaceClient(
   host          = os.getenv("DATABRICKS_HOST"),
   client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
   client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
@@ -34,6 +34,7 @@ ac = AccountClient(
     client_secret = os.getenv("DATABRICKS_ACCOUNT_SECRET")
 )
 
-group_list = ac.workspace_assignment.list(w.get_workspace_id())
+group_list = ac.workspace_assignment.list(ws.get_workspace_id())
 for group in group_list:
-    print(group.principal.display_name)
+  if group.principal.group_name is not None:
+    print(f"{group.principal.display_name}: {group.permissions}")

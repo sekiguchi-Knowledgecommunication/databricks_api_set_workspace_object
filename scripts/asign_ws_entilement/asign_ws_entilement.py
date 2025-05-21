@@ -16,7 +16,7 @@ from databricks.sdk.service.iam import WorkspacePermission,ComplexValue
 # スクリプトファイルのディレクトリを基準に .env ファイルパスを組み立て
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))        # scripts/ の絶対パス
 PROJECT_ROOT = os.path.dirname(BASE_DIR)                     # その１階層上
-CSV_PATH = os.path.join(BASE_DIR,"inputfile/groups_entitlement.csv")
+CSV_PATH = os.path.join(BASE_DIR,"inputfolder/groups_entitlement.csv")
 ENTITLEMENT_VALUES = {
     "workspace_access": "workspace-access",
     "sql_access": "databricks-sql-access",
@@ -26,7 +26,7 @@ ENTITLEMENT_VALUES = {
 # クレデンシャルの取得
 dotenv_path = os.path.join(PROJECT_ROOT, '.env')             # プロジェクトルート直下の .env
 # ワークスペースクライアントの定義
-w = WorkspaceClient(
+ws = WorkspaceClient(
   host          = os.getenv("DATABRICKS_HOST"),
   client_id     = os.getenv("DATABRICKS_CLIENT_ID"),
   client_secret = os.getenv("DATABRICKS_CLIENT_SECRET")
@@ -75,7 +75,7 @@ def build_ws_group_lookup() -> Dict[str, int]:
 # ================= メイン処理 ========================================
 
 def main() -> None:
-    ws_id = w.get_workspace_id()
+    ws_id = ws.get_workspace_id()
     print(f"対象ワークスペース ID: {ws_id}\n")
 
     csv_perms = load_csv(CSV_PATH)
@@ -106,7 +106,7 @@ def main() -> None:
             if ent_values:
                 current = ac.groups.get(id=gid).entitlements or []
                 merged = {e.value for e in current}.union(ent_values)
-                w.groups.update(
+                ws.groups.update(
                     id=str(gid),
                     entitlements=[ComplexValue(value=v) for v in merged],
                 )
