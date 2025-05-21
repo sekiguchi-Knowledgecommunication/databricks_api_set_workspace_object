@@ -35,6 +35,6 @@ ac = AccountClient(
 )
 
 group_list = ac.workspace_assignment.list(ws.get_workspace_id())
+  
 for group in group_list:
-  if group.principal.group_name is not None:
-    print(f"{group.principal.display_name}: {group.permissions}")
+  print(group.principal.principal_id) 
